@@ -22,7 +22,7 @@
 const CONFIG = {
   /** Primary data source — swap this URL for Supabase endpoint, CoRE-MOF
    *  REST export, or any JSON API that returns the same schema. */
-  dataUrl: './mofs.json',
+  dataUrl: 'mofs.json',
 
   /** Future hook: set to true and populate supabaseUrl/supabaseKey
    *  to route through Supabase instead of mofs.json. */
