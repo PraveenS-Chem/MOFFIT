@@ -398,7 +398,6 @@ function resetFilters() {
 ═══════════════════════════════════════════════════ */
 function generateRec() {
   applyPipeline();
-  document.getElementById('recommend')?.scrollIntoView({ behavior: 'smooth' });
 }
 
 /* ═══════════════════════════════════════════════════
