@@ -334,6 +334,7 @@ function applyPipeline() {
 
   DB.active = results;
   renderCards(results, grid);
+  setTimeout(() => grid.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
 }
 
 /* ═══════════════════════════════════════════════════
