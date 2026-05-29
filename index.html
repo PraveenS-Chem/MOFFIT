@@ -733,7 +733,7 @@ footer {
     </p>
     <div class="hero-cta">
       <button class="btn-primary" onclick="scrollTo('recommend')" aria-label="Explore MOF database">⬡ Explore MOFs</button>
-      <button class="btn-ghost"   onclick="generateRec()"         aria-label="Generate AI recommendation">⚡ Generate Recommendation</button>
+      <button class="btn-ghost"   onclick="MOFFIT.generateRec()"  aria-label="Generate AI recommendation">⚡ Generate Recommendation</button>
     </div>
     <div class="hero-stats" role="list" aria-label="Platform statistics">
       <div class="stat" role="listitem"><span class="stat-num">12,400+</span><span class="stat-label">MOF Structures</span></div>
@@ -818,150 +818,15 @@ footer {
         </select>
       </div>
 
-      <button class="btn-generate" onclick="generateRec()" aria-label="Generate AI MOF recommendation">
+      <button class="btn-generate" onclick="MOFFIT.generateRec()" aria-label="Generate AI MOF recommendation">
         <span class="glow-dot" aria-hidden="true"></span>
         Generate AI Recommendation
       </button>
     </div>
 
-    <!-- Results -->
+    <!-- Results — populated dynamically by app.js -->
     <div class="results-grid" id="results-grid" role="list" aria-label="MOF recommendations">
-
-      <!-- Card 1: HKUST-1 -->
-      <article class="mof-card" role="listitem" tabindex="0" aria-label="HKUST-1 MOF card">
-        <div class="card-header-row">
-          <div>
-            <div class="mof-name">HKUST-1</div>
-            <div class="mof-formula">Cu₃(BTC)₂</div>
-          </div>
-          <div class="score-ring" aria-label="AI score 9.2 out of 10">
-            <svg width="52" height="52" viewBox="0 0 56 56" aria-hidden="true">
-              <circle cx="28" cy="28" r="22" fill="none" stroke="rgba(0,212,255,0.1)" stroke-width="3"/>
-              <circle cx="28" cy="28" r="22" fill="none" stroke="url(#g1)" stroke-width="3" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="20.7"/>
-              <defs><linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs>
-            </svg>
-            <div class="score-val">9.2</div>
-          </div>
-        </div>
-        <span class="mof-app-tag">Gas Storage</span>
-        <div class="card-props">
-          <div class="prop"><div class="prop-label">Surface Area</div><div class="prop-val"><strong>1,850</strong> m²/g</div></div>
-          <div class="prop"><div class="prop-label">Pore Volume</div><div class="prop-val"><strong>0.75</strong> cm³/g</div></div>
-          <div class="prop"><div class="prop-label">Stability</div><div class="prop-val"><strong>Moderate</strong></div></div>
-          <div class="prop"><div class="prop-label">Pore Size</div><div class="prop-val"><strong>9.0</strong> Å</div></div>
-        </div>
-        <div class="bar-wrap" aria-label="Property scores">
-          <div class="bar-row"><span class="bar-label">Surface</span><div class="bar-track"><div class="bar-fill" style="width:78%;background:linear-gradient(90deg,var(--cyan),var(--blue))"></div></div><span class="bar-pct">78%</span></div>
-          <div class="bar-row"><span class="bar-label">Stability</span><div class="bar-track"><div class="bar-fill" style="width:55%;background:linear-gradient(90deg,var(--purple),#ec4899)"></div></div><span class="bar-pct">55%</span></div>
-          <div class="bar-row"><span class="bar-label">Porosity</span><div class="bar-track"><div class="bar-fill" style="width:68%;background:linear-gradient(90deg,var(--teal),var(--cyan))"></div></div><span class="bar-pct">68%</span></div>
-        </div>
-        <div class="ai-rec">
-          <span class="ai-rec-icon" aria-hidden="true">✦</span>
-          <span class="ai-rec-text">Optimal for CH₄ and CO₂ storage. Paddle-wheel Cu nodes create high uptake capacity at moderate pressure.</span>
-        </div>
-      </article>
-
-      <!-- Card 2: UiO-66 -->
-      <article class="mof-card" role="listitem" tabindex="0" aria-label="UiO-66 MOF card">
-        <div class="card-header-row">
-          <div>
-            <div class="mof-name">UiO-66</div>
-            <div class="mof-formula">Zr₆O₄(OH)₄(BDC)₆</div>
-          </div>
-          <div class="score-ring" aria-label="AI score 9.6 out of 10">
-            <svg width="52" height="52" viewBox="0 0 56 56" aria-hidden="true">
-              <circle cx="28" cy="28" r="22" fill="none" stroke="rgba(139,92,246,0.15)" stroke-width="3"/>
-              <circle cx="28" cy="28" r="22" fill="none" stroke="url(#g2)" stroke-width="3" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="11.1"/>
-              <defs><linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#8b5cf6"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs>
-            </svg>
-            <div class="score-val" style="color:#a78bfa">9.6</div>
-          </div>
-        </div>
-        <span class="mof-app-tag" style="background:rgba(59,130,246,0.1);border-color:rgba(59,130,246,0.3);color:#93c5fd;">Stability</span>
-        <div class="card-props">
-          <div class="prop"><div class="prop-label">Surface Area</div><div class="prop-val"><strong>1,187</strong> m²/g</div></div>
-          <div class="prop"><div class="prop-label">Pore Volume</div><div class="prop-val"><strong>0.50</strong> cm³/g</div></div>
-          <div class="prop"><div class="prop-label">Stability</div><div class="prop-val"><strong>Excellent</strong></div></div>
-          <div class="prop"><div class="prop-label">Pore Size</div><div class="prop-val"><strong>6.0</strong> Å</div></div>
-        </div>
-        <div class="bar-wrap">
-          <div class="bar-row"><span class="bar-label">Surface</span><div class="bar-track"><div class="bar-fill" style="width:52%;background:linear-gradient(90deg,var(--cyan),var(--blue))"></div></div><span class="bar-pct">52%</span></div>
-          <div class="bar-row"><span class="bar-label">Stability</span><div class="bar-track"><div class="bar-fill" style="width:95%;background:linear-gradient(90deg,var(--purple),#3b82f6)"></div></div><span class="bar-pct">95%</span></div>
-          <div class="bar-row"><span class="bar-label">Porosity</span><div class="bar-track"><div class="bar-fill" style="width:48%;background:linear-gradient(90deg,var(--teal),var(--cyan))"></div></div><span class="bar-pct">48%</span></div>
-        </div>
-        <div class="ai-rec">
-          <span class="ai-rec-icon" aria-hidden="true">✦</span>
-          <span class="ai-rec-text">Exceptional water and thermal stability (up to 500°C). Top candidate for industrial catalysis and aqueous applications.</span>
-        </div>
-      </article>
-
-      <!-- Card 3: ZIF-8 -->
-      <article class="mof-card" role="listitem" tabindex="0" aria-label="ZIF-8 MOF card">
-        <div class="card-header-row">
-          <div>
-            <div class="mof-name">ZIF-8</div>
-            <div class="mof-formula">Zn(2-MeIm)₂</div>
-          </div>
-          <div class="score-ring" aria-label="AI score 8.8 out of 10">
-            <svg width="52" height="52" viewBox="0 0 56 56" aria-hidden="true">
-              <circle cx="28" cy="28" r="22" fill="none" stroke="rgba(20,184,166,0.15)" stroke-width="3"/>
-              <circle cx="28" cy="28" r="22" fill="none" stroke="url(#g3)" stroke-width="3" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="25.1"/>
-              <defs><linearGradient id="g3" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#14b8a6"/><stop offset="100%" stop-color="#00d4ff"/></linearGradient></defs>
-            </svg>
-            <div class="score-val" style="color:#2dd4bf">8.8</div>
-          </div>
-        </div>
-        <span class="mof-app-tag" style="background:rgba(20,184,166,0.1);border-color:rgba(20,184,166,0.3);color:#2dd4bf;">Separation</span>
-        <div class="card-props">
-          <div class="prop"><div class="prop-label">Surface Area</div><div class="prop-val"><strong>1,630</strong> m²/g</div></div>
-          <div class="prop"><div class="prop-label">Pore Volume</div><div class="prop-val"><strong>0.66</strong> cm³/g</div></div>
-          <div class="prop"><div class="prop-label">Stability</div><div class="prop-val"><strong>High</strong></div></div>
-          <div class="prop"><div class="prop-label">Pore Size</div><div class="prop-val"><strong>11.6</strong> Å</div></div>
-        </div>
-        <div class="bar-wrap">
-          <div class="bar-row"><span class="bar-label">Surface</span><div class="bar-track"><div class="bar-fill" style="width:71%;background:linear-gradient(90deg,var(--cyan),var(--blue))"></div></div><span class="bar-pct">71%</span></div>
-          <div class="bar-row"><span class="bar-label">Stability</span><div class="bar-track"><div class="bar-fill" style="width:82%;background:linear-gradient(90deg,var(--teal),var(--cyan))"></div></div><span class="bar-pct">82%</span></div>
-          <div class="bar-row"><span class="bar-label">Porosity</span><div class="bar-track"><div class="bar-fill" style="width:63%;background:linear-gradient(90deg,var(--teal),var(--cyan))"></div></div><span class="bar-pct">63%</span></div>
-        </div>
-        <div class="ai-rec">
-          <span class="ai-rec-icon" aria-hidden="true">✦</span>
-          <span class="ai-rec-text">Sodalite topology with 3.4 Å aperture. Highly selective for H₂/CO₂ separation and post-combustion capture.</span>
-        </div>
-      </article>
-
-      <!-- Card 4: MIL-101 -->
-      <article class="mof-card" role="listitem" tabindex="0" aria-label="MIL-101 MOF card">
-        <div class="card-header-row">
-          <div>
-            <div class="mof-name">MIL-101</div>
-            <div class="mof-formula">Cr₃F(H₂O)₂O[BDC]₃</div>
-          </div>
-          <div class="score-ring" aria-label="AI score 9.0 out of 10">
-            <svg width="52" height="52" viewBox="0 0 56 56" aria-hidden="true">
-              <circle cx="28" cy="28" r="22" fill="none" stroke="rgba(249,115,22,0.12)" stroke-width="3"/>
-              <circle cx="28" cy="28" r="22" fill="none" stroke="url(#g4)" stroke-width="3" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="16.6"/>
-              <defs><linearGradient id="g4" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#f97316"/><stop offset="100%" stop-color="#eab308"/></linearGradient></defs>
-            </svg>
-            <div class="score-val" style="color:#fb923c">9.0</div>
-          </div>
-        </div>
-        <span class="mof-app-tag" style="background:rgba(249,115,22,0.08);border-color:rgba(249,115,22,0.25);color:#fb923c;">Catalysis</span>
-        <div class="card-props">
-          <div class="prop"><div class="prop-label">Surface Area</div><div class="prop-val"><strong>5,900</strong> m²/g</div></div>
-          <div class="prop"><div class="prop-label">Pore Volume</div><div class="prop-val"><strong>3.86</strong> cm³/g</div></div>
-          <div class="prop"><div class="prop-label">Stability</div><div class="prop-val"><strong>Good</strong></div></div>
-          <div class="prop"><div class="prop-label">Pore Size</div><div class="prop-val"><strong>29–34</strong> Å</div></div>
-        </div>
-        <div class="bar-wrap">
-          <div class="bar-row"><span class="bar-label">Surface</span><div class="bar-track"><div class="bar-fill" style="width:99%;background:linear-gradient(90deg,#f97316,#eab308)"></div></div><span class="bar-pct">99%</span></div>
-          <div class="bar-row"><span class="bar-label">Stability</span><div class="bar-track"><div class="bar-fill" style="width:65%;background:linear-gradient(90deg,var(--purple),#ec4899)"></div></div><span class="bar-pct">65%</span></div>
-          <div class="bar-row"><span class="bar-label">Porosity</span><div class="bar-track"><div class="bar-fill" style="width:92%;background:linear-gradient(90deg,#f97316,#eab308)"></div></div><span class="bar-pct">92%</span></div>
-        </div>
-        <div class="ai-rec">
-          <span class="ai-rec-icon" aria-hidden="true">✦</span>
-          <span class="ai-rec-text">Record-breaking BET surface among Cr-MOFs. Mesoporous cages enable drug delivery and bulky molecule catalysis.</span>
-        </div>
-      </article>
+      <!-- Cards rendered by app.js → loadMOFs() → renderCards() -->
     </div><!-- /results-grid -->
   </div><!-- /recommend-layout -->
 </section>
@@ -1495,23 +1360,12 @@ makeVizCanvas('viz3', 'vc3', (ctx, W, H, t) => {
 })();
 
 /* ══════════════════════════════════════════════════
-   GENERATE ANIMATION — stagger card reveal
+   GENERATE ANIMATION — delegated to app.js
+   window.MOFFIT.generateRec() handles card stagger
+   and scroll. The inline version has been removed.
 ══════════════════════════════════════════════════ */
-function generateRec() {
-  const grid  = document.getElementById('results-grid');
-  const cards = grid.querySelectorAll('.mof-card');
-  cards.forEach((c, i) => {
-    c.style.opacity   = '0';
-    c.style.transform = 'translateY(20px)';
-    c.style.transition = 'none';
-    setTimeout(() => {
-      c.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
-      c.style.opacity    = '1';
-      c.style.transform  = 'translateY(0)';
-    }, i * 120 + 80);
-  });
-  document.getElementById('recommend').scrollIntoView({ behavior: 'smooth' });
-}
-</script>
+
+<!-- ══ DATA LAYER ══ -->
+<script src="./app.js"></script>
 </body>
 </html>
