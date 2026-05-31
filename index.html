@@ -612,6 +612,19 @@ footer {
 /* ═══════════════════════════════════════════════════
    REDUCED MOTION — respect user preference
 ═══════════════════════════════════════════════════ */
+/* MOF Selector Button active state */
+.mof-selector-btn:hover {
+  border-color: rgba(0,212,255,0.4) !important;
+  color: var(--text-primary) !important;
+  background: rgba(0,212,255,0.06) !important;
+}
+.mof-selector-btn.active {
+  border-color: rgba(0,212,255,0.6) !important;
+  color: var(--cyan) !important;
+  background: rgba(0,212,255,0.1) !important;
+  box-shadow: 0 0 12px rgba(0,212,255,0.1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:0.01ms !important; transition-duration:0.01ms !important; }
 }
@@ -843,14 +856,21 @@ footer {
       <p class="section-desc">Select any MOF card above to visualize its pore geometry, network topology, and metal orbital structure in real time.</p>
     </div>
 
-    <!-- Active MOF Banner — updated by app.js selectMOF() -->
+    <!-- Active MOF Banner -->
     <div id="viz-active-mof" aria-live="polite" style="
-      margin-bottom:24px; padding:16px 20px; border-radius:12px;
+      margin-bottom:16px; padding:16px 20px; border-radius:12px;
       background:rgba(0,212,255,0.05); border:1px solid rgba(0,212,255,0.15);
       opacity:0; transition:opacity 0.4s ease; min-height:72px;">
       <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);letter-spacing:0.1em;">
-        ↑ SELECT A MOF CARD TO BEGIN VISUALIZATION
+        ↑ GENERATE A RECOMMENDATION THEN SELECT A MOF CARD
       </div>
+    </div>
+
+    <!-- MOF Selector Panel — populated by app.js updateMOFSelector() -->
+    <div id="mof-selector-panel" style="
+      display:none; margin-bottom:24px; padding:16px 20px;
+      border-radius:12px; background:rgba(10,20,32,0.6);
+      border:1px solid var(--border); overflow-x:auto;">
     </div>
 
     <div class="viz-grid" role="list" aria-label="Molecular visualizations">
