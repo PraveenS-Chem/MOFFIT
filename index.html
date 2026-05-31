@@ -840,20 +840,31 @@ footer {
     <div class="section-header">
       <div class="section-label" aria-hidden="true">Scientific Visualization</div>
       <h2 class="section-title" id="viz-title">Crystal Structure Explorer</h2>
-      <p class="section-desc">Real-time molecular topology rendering. Interact with live lattice models, pore geometry, and electronic density maps.</p>
+      <p class="section-desc">Select any MOF card above to visualize its pore geometry, network topology, and metal orbital structure in real time.</p>
     </div>
+
+    <!-- Active MOF Banner — updated by app.js selectMOF() -->
+    <div id="viz-active-mof" aria-live="polite" style="
+      margin-bottom:24px; padding:16px 20px; border-radius:12px;
+      background:rgba(0,212,255,0.05); border:1px solid rgba(0,212,255,0.15);
+      opacity:0; transition:opacity 0.4s ease; min-height:72px;">
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);letter-spacing:0.1em;">
+        ↑ SELECT A MOF CARD TO BEGIN VISUALIZATION
+      </div>
+    </div>
+
     <div class="viz-grid" role="list" aria-label="Molecular visualizations">
-      <div class="viz-card" id="vc1" role="listitem" aria-label="Hexagonal lattice BCC visualization" tabindex="0">
+      <div class="viz-card" id="vc1" role="listitem" aria-label="Pore geometry visualization" tabindex="0">
         <canvas id="viz1" aria-hidden="true"></canvas>
-        <div class="viz-card-label">Hexagonal Lattice · BCC</div>
+        <div class="viz-card-label">Pore Geometry · — Å</div>
       </div>
       <div class="viz-card" id="vc2" role="listitem" aria-label="Pore network topology visualization" tabindex="0">
         <canvas id="viz2" aria-hidden="true"></canvas>
         <div class="viz-card-label">Pore Network · Topology</div>
       </div>
-      <div class="viz-card" id="vc3" role="listitem" aria-label="Orbital density map visualization" tabindex="0">
+      <div class="viz-card" id="vc3" role="listitem" aria-label="Metal orbital density visualization" tabindex="0">
         <canvas id="viz3" aria-hidden="true"></canvas>
-        <div class="viz-card-label">Orbital Density Map</div>
+        <div class="viz-card-label">Metal Orbital · —</div>
       </div>
     </div>
   </div>
@@ -1153,218 +1164,12 @@ function makeVizCanvas(canvasId, cardId, drawFn) {
   if (!prefersReducedMotion) loop();
 }
 
-/* ── Viz 1: Hexagonal Lattice ── */
-makeVizCanvas('viz1', 'vc1', (ctx, W, H, t) => {
-  ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#050b12';
-  ctx.fillRect(0, 0, W, H);
-
-  const R  = isMobile() ? 22 : 28;
-  const dx = R * Math.sqrt(3);
-  const dy = R * 1.5;
-  const cols = Math.ceil(W / dx) + 3;
-  const rows = Math.ceil(H / dy) + 3;
-  const maxDist = Math.sqrt(W * W + H * H) / 2;
-
-  for (let row = -2; row < rows; row++) {
-    for (let col = -2; col < cols; col++) {
-      const x = col * dx + (row % 2 === 0 ? 0 : dx / 2);
-      const y = row * dy;
-      const dist  = Math.sqrt((x - W/2)**2 + (y - H/2)**2);
-      const alpha = Math.max(0, 1 - dist / maxDist) * 0.6;
-      const pulse = Math.sin(dist * 0.02 - t * 2) * 0.5 + 0.5;
-
-      ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const angle = Math.PI / 180 * (60 * i - 30);
-        const px = x + R * Math.cos(angle);
-        const py = y + R * Math.sin(angle);
-        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      ctx.strokeStyle = `rgba(0,212,255,${alpha * (0.3 + pulse * 0.2)})`;
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
-    }
-  }
-
-  const sweepX = W/2 + Math.cos(t) * W/3;
-  const sweepGrd = ctx.createRadialGradient(sweepX, H/2, 0, sweepX, H/2, 160);
-  sweepGrd.addColorStop(0, 'rgba(0,212,255,0.07)');
-  sweepGrd.addColorStop(1, 'rgba(0,212,255,0)');
-  ctx.fillStyle = sweepGrd;
-  ctx.fillRect(0, 0, W, H);
-});
-
-/* ── Viz 2: Pore Network ── */
-(function() {
-  const card   = document.getElementById('vc2');
-  const canvas = document.getElementById('viz2');
-  if (!canvas || !card) return;
-  const ctx = canvas.getContext('2d');
-  const vis = makeVisibilityTracker(card);
-  // Fewer nodes on mobile
-  const nodeCount = isMobile() ? 10 : 18;
-  const nodes = Array.from({ length: nodeCount }, () => ({
-    x: Math.random(), y: Math.random(),
-    vx: (Math.random() - 0.5) * 0.001,
-    vy: (Math.random() - 0.5) * 0.001,
-    r:  3 + Math.random() * 5,
-    phase: Math.random() * Math.PI * 2,
-  }));
-  let t = 0;
-
-  function resize() {
-    canvas.width  = card.clientWidth;
-    canvas.height = card.clientHeight;
-  }
-
-  function draw() {
-    requestAnimationFrame(draw);
-    if (!vis.isVisible()) return;
-    const W = canvas.width, H = canvas.height;
-    t += 0.01;
-
-    ctx.fillStyle = '#050b12';
-    ctx.fillRect(0, 0, W, H);
-
-    nodes.forEach(n => {
-      n.x += n.vx; n.y += n.vy;
-      if (n.x < 0.05 || n.x > 0.95) n.vx *= -1;
-      if (n.y < 0.05 || n.y > 0.95) n.vy *= -1;
-    });
-
-    const EDGE = 130;
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const ax = nodes[i].x * W, ay = nodes[i].y * H;
-        const bx = nodes[j].x * W, by = nodes[j].y * H;
-        const d  = Math.sqrt((ax-bx)**2 + (ay-by)**2);
-        if (d < EDGE) {
-          const alpha = (1 - d / EDGE) * 0.6;
-          ctx.beginPath();
-          ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
-          ctx.strokeStyle = `rgba(139,92,246,${alpha})`;
-          ctx.lineWidth = 1.2;
-          ctx.stroke();
-        }
-      }
-    }
-
-    nodes.forEach(n => {
-      const x = n.x * W, y = n.y * H;
-      const pulse = Math.sin(t * 2 + n.phase) * 0.5 + 0.5;
-      ctx.beginPath();
-      ctx.arc(x, y, n.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(160,120,255,${0.7 + pulse * 0.3})`;
-      ctx.fill();
-    });
-  }
-
-  window.addEventListener('resize', debounce(resize, 200));
-  resize();
-  if (!prefersReducedMotion) draw();
-})();
-
-/* ── Viz 3: Orbital Density ── */
-makeVizCanvas('viz3', 'vc3', (ctx, W, H, t) => {
-  ctx.fillStyle = 'rgba(5,11,18,0.25)';
-  ctx.fillRect(0, 0, W, H);
-
-  const cx = W / 2, cy = H / 2;
-  const orbits = isMobile() ? 3 : 4; // one fewer orbit on mobile
-
-  for (let orbit = 1; orbit <= orbits; orbit++) {
-    const r         = orbit * (isMobile() ? 28 : 36);
-    const electrons = orbit * 2;
-
-    for (let e = 0; e < electrons; e++) {
-      const angle = (e / electrons) * Math.PI * 2 + t * (orbit % 2 === 0 ? 0.8 : -0.8) / orbit;
-      const tilt  = orbit * 15 * Math.PI / 180;
-      const ex    = cx + r * Math.cos(angle) * Math.cos(tilt);
-      const ey    = cy + r * Math.cos(angle) * Math.sin(tilt) + r * Math.sin(angle) * 0.4;
-
-      const pulse = Math.sin(t * 3 + e + orbit) * 0.5 + 0.5;
-      const colors = ['0,212,255', '59,130,246', '139,92,246', '20,184,166'];
-      const c = colors[orbit - 1];
-      const grd = ctx.createRadialGradient(ex, ey, 0, ex, ey, 7);
-      grd.addColorStop(0, `rgba(${c},0.9)`);
-      grd.addColorStop(1, `rgba(${c},0)`);
-      ctx.beginPath();
-      ctx.arc(ex, ey, 4 + pulse * 2.5, 0, Math.PI * 2);
-      ctx.fillStyle = grd;
-      ctx.fill();
-    }
-
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, r, r * 0.4, orbit * 15 * Math.PI / 180, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(0,212,255,${0.06 + orbit * 0.02})`;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  }
-
-  const ng = ctx.createRadialGradient(cx, cy, 0, cx, cy, 16);
-  ng.addColorStop(0,   'rgba(255,255,255,0.9)');
-  ng.addColorStop(0.4, 'rgba(0,212,255,0.8)');
-  ng.addColorStop(1,   'rgba(0,212,255,0)');
-  ctx.beginPath();
-  ctx.arc(cx, cy, 16, 0, Math.PI * 2);
-  ctx.fillStyle = ng;
-  ctx.fill();
-});
-
 /* ══════════════════════════════════════════════════
-   PARTICLE BACKGROUND (Visualize section)
+   VIZ CANVASES — now handled by app.js VIZ engine
+   Cards call MOFFIT.selectMOF(id) which drives
+   all three canvases with real MOF data.
 ══════════════════════════════════════════════════ */
-(function() {
-  const canvas  = document.getElementById('particle-bg');
-  const section = document.getElementById('visualize');
-  if (!canvas || !section || prefersReducedMotion) return;
-  const ctx = canvas.getContext('2d');
-  const vis = makeVisibilityTracker(section);
-
-  const count = isMobile() ? 25 : 60;
-  const particles = Array.from({ length: count }, () => ({
-    x:     Math.random(), y:     Math.random(),
-    vx:    (Math.random() - 0.5) * 0.0003,
-    vy:    (Math.random() - 0.5) * 0.0003,
-    r:     1 + Math.random() * 2,
-    alpha: 0.1 + Math.random() * 0.4,
-    color: Math.random() > 0.5 ? '0,212,255' : '139,92,246'
-  }));
-
-  function resize() {
-    canvas.width  = section.clientWidth;
-    canvas.height = section.clientHeight;
-  }
-
-  function draw() {
-    requestAnimationFrame(draw);
-    if (!vis.isVisible()) return;
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    particles.forEach(p => {
-      p.x += p.vx; p.y += p.vy;
-      if (p.x < 0) p.x = 1; if (p.x > 1) p.x = 0;
-      if (p.y < 0) p.y = 1; if (p.y > 1) p.y = 0;
-      ctx.beginPath();
-      ctx.arc(p.x * W, p.y * H, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${p.color},${p.alpha})`;
-      ctx.fill();
-    });
-  }
-
-  window.addEventListener('resize', debounce(resize, 200));
-  resize();
-  draw();
-})();
-   </script>
-
-/* ══════════════════════════════════════════════════
-   GENERATE ANIMATION — delegated to app.js
-   window.MOFFIT.generateRec() handles card stagger
-   and scroll. The inline version has been removed.
-══════════════════════════════════════════════════ */
+</script>
 
 <!-- ══ DATA LAYER ══ -->
 <script src="./app.js"></script>
