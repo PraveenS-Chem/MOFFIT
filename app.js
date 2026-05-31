@@ -256,6 +256,9 @@ function selectMOF(id) {
   VIZ.drawPoreStructure(mof);
   VIZ.drawPoreNetwork(mof);
   VIZ.drawOrbitalDensity(mof);
+
+  // Refresh live insights for this MOF's application type
+  if (window.INSIGHTS) window.INSIGHTS.loadInsights(mof);
 }
 
 /* ═══════════════════════════════════════════════════
