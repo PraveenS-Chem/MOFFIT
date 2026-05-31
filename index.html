@@ -875,47 +875,30 @@ footer {
 <!-- ══ INSIGHTS ══ -->
 <section id="insights" aria-labelledby="insights-title">
   <div class="section-header">
-    <div class="section-label" aria-hidden="true">Research Intelligence</div>
-    <h2 class="section-title" id="insights-title">AI-Generated Insights</h2>
-    <p class="section-desc">Synthesized from 340,000+ published papers. Updated daily from the Cambridge Structural Database and CoRE-MOF.</p>
+    <div class="section-label" aria-hidden="true">
+      Research Intelligence
+      <span id="insights-live-badge" style="
+        margin-left:10px;font-size:9px;padding:2px 8px;border-radius:4px;
+        background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.3);
+        color:var(--cyan);letter-spacing:0.1em;opacity:0;transition:opacity 0.4s;">
+        LIVE
+      </span>
+    </div>
+    <h2 class="section-title" id="insights-title">Live Research Tracker</h2>
+    <p class="section-desc" id="insights-desc">
+      Fetching live papers from Semantic Scholar's 200M+ paper index…
+    </p>
+    <div style="margin-top:10px;font-family:var(--font-mono);font-size:10px;
+                color:var(--text-muted);letter-spacing:0.06em;">
+      Powered by
+      <a href="https://www.semanticscholar.org" target="_blank" rel="noopener"
+         style="color:var(--cyan);text-decoration:none;">Semantic Scholar</a>
+      · Updates when you select a MOF card
+    </div>
   </div>
-  <div class="insights-grid" role="list">
-    <article class="insight-card c1" role="listitem" tabindex="0">
-      <div class="insight-inner">
-        <div class="insight-icon ic1" aria-hidden="true">🌍</div>
-        <div class="insight-title">Sustainability Applications</div>
-        <p class="insight-body">MOFs are emerging as pivotal materials for direct air capture (DAC). Amine-functionalized variants show 4.2× higher CO₂ selectivity over N₂ at 400 ppm concentration — critical for carbon-negative technologies.</p>
-        <span class="insight-tag it1">Carbon Capture</span>
-        <div class="insight-meta">
-          <div class="insight-avatar" aria-hidden="true">AI</div>
-          <span class="insight-by">Generated from 2,847 papers · Updated 2h ago</span>
-        </div>
-      </div>
-    </article>
-    <article class="insight-card c2" role="listitem" tabindex="0">
-      <div class="insight-inner">
-        <div class="insight-icon ic2" aria-hidden="true">⚗️</div>
-        <div class="insight-title">Gas Storage Frontier</div>
-        <p class="insight-body">Volumetric methane storage in NU-125 and HKUST-1 exceeds the DOE target of 263 v/v at 65 bar. Flexible "breathing" MOFs (MIL-53 family) exhibit pressure-responsive gating ideal for reversible gas release cycles.</p>
-        <span class="insight-tag it2">Gas Storage</span>
-        <div class="insight-meta">
-          <div class="insight-avatar" aria-hidden="true">AI</div>
-          <span class="insight-by">Generated from 1,923 papers · Updated 4h ago</span>
-        </div>
-      </div>
-    </article>
-    <article class="insight-card c3" role="listitem" tabindex="0">
-      <div class="insight-inner">
-        <div class="insight-icon ic3" aria-hidden="true">⚡</div>
-        <div class="insight-title">Hydrogen Storage Trends</div>
-        <p class="insight-body">Cryogenic H₂ adsorption in MOF-5 and NU-1000 remains competitive with compressed gas tanks at 77K. ML-guided linker functionalization is boosting room-temperature H₂ uptake by 38% in new candidates.</p>
-        <span class="insight-tag it3">Hydrogen Economy</span>
-        <div class="insight-meta">
-          <div class="insight-avatar" aria-hidden="true">AI</div>
-          <span class="insight-by">Generated from 3,104 papers · Updated 1h ago</span>
-        </div>
-      </div>
-    </article>
+
+  <div class="insights-grid" id="insights-grid" role="list">
+    <!-- Populated dynamically by insights.js -->
   </div>
 </section>
 
@@ -1172,6 +1155,7 @@ function makeVizCanvas(canvasId, cardId, drawFn) {
 </script>
 
 <!-- ══ DATA LAYER ══ -->
+<script src="./insights.js"></script>
 <script src="./app.js"></script>
 </body>
 </html>
