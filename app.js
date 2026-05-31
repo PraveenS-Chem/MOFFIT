@@ -1,25 +1,47 @@
 /**
- * MOFFit — app.js  v4.0
- * - Cards hidden on load, revealed only after Generate is clicked
- * - MOF Selector Panel above visualizer
- * - Insights update fixed with retry loop
+ * MOFFit — app.js  v5.0
+ * New features:
+ *   • MOF Comparison Tool  — select up to 3 MOFs, side-by-side radar + table
+ *   • Property Range Filter — dual-handle sliders for surfaceArea, poreVolume,
+ *                             poreSize, thermalStability, recommendationScore
  */
 'use strict';
 
+/* ════════════════════════════════════════════
+   CONFIG
+════════════════════════════════════════════ */
 const CONFIG = {
-  dataUrl: './mofs.json',
-  cardStaggerMs: 80,
+  dataUrl:          './mofs.json',
+  cardStaggerMs:    80,
   searchDebounceMs: 220,
 };
 
+/* ════════════════════════════════════════════
+   IN-MEMORY DB
+════════════════════════════════════════════ */
 const DB = {
-  all: [],
-  active: [],
+  all:      [],
+  active:   [],
   selected: null,
   revealed: false,
+  /* Comparison: up to 3 MOF ids */
+  compare:  new Set(),
 };
 
-/* ─── METAL VIZ ─── */
+/* ════════════════════════════════════════════
+   PROPERTY RANGE STATE
+   min/max derived from dataset after load.
+════════════════════════════════════════════ */
+const RANGES = {
+  surfaceArea:         { min:0, max:6000, lo:0, hi:6000 },
+  poreVolume:          { min:0, max:4.0,  lo:0, hi:4.0  },
+  thermalStability:    { min:0, max:600,  lo:0, hi:600  },
+  recommendationScore: { min:7, max:10,   lo:7, hi:10   },
+};
+
+/* ════════════════════════════════════════════
+   METAL VISUALISATION
+════════════════════════════════════════════ */
 const METAL_VIZ = {
   'Copper (Cu)':    { color:'#f97316', color2:'#eab308', symbol:'Cu', orbitals:[2,8,1],    topology:'paddlewheel' },
   'Zinc (Zn)':      { color:'#00d4ff', color2:'#3b82f6', symbol:'Zn', orbitals:[2,8,2],    topology:'sodalite'    },
@@ -33,7 +55,9 @@ const METAL_VIZ = {
 };
 function getMetalViz(m) { return METAL_VIZ[m] || METAL_VIZ['Zinc (Zn)']; }
 
-/* ─── PALETTES ─── */
+/* ════════════════════════════════════════════
+   PALETTES
+════════════════════════════════════════════ */
 const PALETTES = [
   { min:9.4, ring:'#00d4ff', ringEnd:'#3b82f6', ringBg:'rgba(0,212,255,0.1)',   scoreColor:'#00d4ff', tagBg:'rgba(0,212,255,0.1)',   tagBorder:'rgba(0,212,255,0.3)',   tagColor:'#67e8f9' },
   { min:9.0, ring:'#8b5cf6', ringEnd:'#3b82f6', ringBg:'rgba(139,92,246,0.15)', scoreColor:'#a78bfa', tagBg:'rgba(59,130,246,0.1)',  tagBorder:'rgba(59,130,246,0.3)',  tagColor:'#93c5fd' },
@@ -43,7 +67,9 @@ const PALETTES = [
 ];
 function getPalette(s) { return PALETTES.find(p => s >= p.min); }
 
-/* ─── BAR METRICS ─── */
+/* ════════════════════════════════════════════
+   BAR METRICS
+════════════════════════════════════════════ */
 function getBarMetrics(mof) {
   const surface   = Math.min(Math.round((mof.surfaceArea / 5900) * 100), 99);
   const stabMap   = { Excellent:95, High:82, Good:65, Moderate:55, Low:30 };
@@ -52,7 +78,9 @@ function getBarMetrics(mof) {
   return { surface, stability, porosity };
 }
 
-/* ─── SVG RING ─── */
+/* ════════════════════════════════════════════
+   SVG RING
+════════════════════════════════════════════ */
 function buildRingSVG(mof, palette, uid) {
   const C = 138.2, offset = C - (mof.recommendationScore / 10) * C, gid = `g-${uid}`;
   return `<svg width="52" height="52" viewBox="0 0 56 56" aria-hidden="true">
@@ -62,8 +90,7 @@ function buildRingSVG(mof, palette, uid) {
     <defs><linearGradient id="${gid}" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="${palette.ring}"/>
       <stop offset="100%" stop-color="${palette.ringEnd}"/>
-    </linearGradient></defs>
-  </svg>`;
+    </linearGradient></defs></svg>`;
 }
 
 const BAR_GRADIENTS = {
@@ -72,7 +99,9 @@ const BAR_GRADIENTS = {
   porosity:  'linear-gradient(90deg,var(--teal),var(--cyan))',
 };
 
-/* ─── CARD TEMPLATE ─── */
+/* ════════════════════════════════════════════
+   CARD TEMPLATE
+════════════════════════════════════════════ */
 function buildCardHTML(mof, index) {
   const palette    = getPalette(mof.recommendationScore);
   const bars       = getBarMetrics(mof);
@@ -80,12 +109,23 @@ function buildCardHTML(mof, index) {
   const ringSVG    = buildRingSVG(mof, palette, uid);
   const primaryApp = Array.isArray(mof.applicationTypes) ? mof.applicationTypes[0] : mof.applicationTypes;
   const mv         = getMetalViz(mof.metalNode);
+  const inCompare  = DB.compare.has(mof.id);
+
   return `
-<article class="mof-card" role="listitem" tabindex="0"
+<article class="mof-card${inCompare ? ' mof-card--comparing' : ''}" role="listitem" tabindex="0"
          aria-label="${mof.name} — tap to visualize"
          data-id="${mof.id}"
          onclick="MOFFIT.selectMOF('${mof.id}')"
          onkeydown="if(event.key==='Enter'||event.key===' ')MOFFIT.selectMOF('${mof.id}')">
+
+  <!-- Compare checkbox -->
+  <button class="compare-toggle${inCompare ? ' active' : ''}"
+          aria-label="${inCompare ? 'Remove from comparison' : 'Add to comparison'}"
+          aria-pressed="${inCompare}"
+          onclick="event.stopPropagation(); MOFFIT.toggleCompare('${mof.id}')">
+    ${inCompare ? '✓' : '+'}
+  </button>
+
   <div class="card-header-row">
     <div>
       <div class="mof-name">${mof.name}</div>
@@ -96,47 +136,50 @@ function buildCardHTML(mof, index) {
       <div class="score-val" style="color:${palette.scoreColor}">${mof.recommendationScore}</div>
     </div>
   </div>
+
   <span class="mof-app-tag" style="background:${palette.tagBg};border-color:${palette.tagBorder};color:${palette.tagColor};">
     ${primaryApp}
   </span>
+
   <div class="card-props">
     <div class="prop"><div class="prop-label">Surface Area</div><div class="prop-val"><strong>${mof.surfaceArea.toLocaleString()}</strong> m²/g</div></div>
     <div class="prop"><div class="prop-label">Pore Volume</div><div class="prop-val"><strong>${mof.poreVolume.toFixed(2)}</strong> cm³/g</div></div>
     <div class="prop"><div class="prop-label">Stability</div><div class="prop-val"><strong>${mof.waterStability}</strong></div></div>
     <div class="prop"><div class="prop-label">Pore Size</div><div class="prop-val"><strong>${mof.poreSize}</strong> Å</div></div>
   </div>
+
   <div class="bar-wrap">
     <div class="bar-row"><span class="bar-label">Surface</span><div class="bar-track"><div class="bar-fill" style="width:${bars.surface}%;background:${BAR_GRADIENTS.surface}"></div></div><span class="bar-pct">${bars.surface}%</span></div>
     <div class="bar-row"><span class="bar-label">Stability</span><div class="bar-track"><div class="bar-fill" style="width:${bars.stability}%;background:${BAR_GRADIENTS.stability}"></div></div><span class="bar-pct">${bars.stability}%</span></div>
     <div class="bar-row"><span class="bar-label">Porosity</span><div class="bar-track"><div class="bar-fill" style="width:${bars.porosity}%;background:${BAR_GRADIENTS.porosity}"></div></div><span class="bar-pct">${bars.porosity}%</span></div>
   </div>
+
   <div class="ai-rec">
     <span class="ai-rec-icon" aria-hidden="true">✦</span>
     <span class="ai-rec-text">${mof.description}</span>
   </div>
+
   <div style="margin-top:10px;font-family:var(--font-mono);font-size:9px;color:${mv.color};
               letter-spacing:0.1em;opacity:0.7;display:flex;align-items:center;gap:6px;">
     <span style="width:4px;height:4px;border-radius:50%;background:${mv.color};display:inline-block;"></span>
-    TAP TO VISUALIZE STRUCTURE
+    TAP TO VISUALIZE · + TO COMPARE
   </div>
 </article>`.trim();
 }
 
-/* ─── STATE DISPLAYS ─── */
+/* ════════════════════════════════════════════
+   STATE DISPLAYS
+════════════════════════════════════════════ */
 function showPromptState(grid) {
   grid.innerHTML = `
     <div style="grid-column:1/-1;text-align:center;padding:56px 24px;">
       <div style="font-size:40px;margin-bottom:16px;opacity:0.35;">⬡</div>
-      <div style="font-family:var(--font-display);font-size:20px;font-weight:700;
-                  color:var(--text-secondary);margin-bottom:10px;">Configure your query</div>
-      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);
-                  letter-spacing:0.08em;max-width:280px;margin:0 auto 28px;line-height:1.6;">
-        Set application type, desired property, and metal node — then click Generate AI Recommendation
+      <div style="font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--text-secondary);margin-bottom:10px;">Configure your query</div>
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);letter-spacing:0.08em;max-width:280px;margin:0 auto 28px;line-height:1.6;">
+        Set filters or property ranges, then click Generate AI Recommendation
       </div>
-      <div style="font-family:var(--font-mono);font-size:10px;color:var(--cyan);
-                  letter-spacing:0.12em;display:flex;align-items:center;justify-content:center;gap:8px;">
-        <span style="width:6px;height:6px;border-radius:50%;background:var(--cyan);
-                     display:inline-block;animation:pulse-dot 1.5s infinite;"></span>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--cyan);letter-spacing:0.12em;display:flex;align-items:center;justify-content:center;gap:8px;">
+        <span style="width:6px;height:6px;border-radius:50%;background:var(--cyan);display:inline-block;animation:pulse-dot 1.5s infinite;"></span>
         Awaiting query parameters
       </div>
     </div>`;
@@ -146,9 +189,7 @@ function showLoadingState(grid) {
   grid.innerHTML = `
     <div style="grid-column:1/-1;text-align:center;padding:48px 0;">
       <div style="font-size:28px;margin-bottom:12px;animation:pulse-dot 1.2s infinite;">⬡</div>
-      <div style="font-family:var(--font-mono);font-size:12px;color:var(--cyan);letter-spacing:0.12em;text-transform:uppercase;">
-        Loading MOF database…
-      </div>
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--cyan);letter-spacing:0.12em;text-transform:uppercase;">Loading MOF database…</div>
     </div>`;
 }
 
@@ -158,9 +199,7 @@ function showErrorState(grid, message) {
       <div style="font-size:28px;margin-bottom:12px;">⚠</div>
       <div style="font-family:var(--font-mono);font-size:12px;color:#f87171;">Failed to load MOF data</div>
       <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-top:8px;">${message}</div>
-      <button onclick="MOFFIT.loadMOFs()" style="margin-top:20px;font-family:var(--font-mono);font-size:11px;
-        color:var(--cyan);background:transparent;border:1px solid var(--border-bright);
-        border-radius:6px;padding:8px 18px;cursor:pointer;">↺ RETRY</button>
+      <button onclick="MOFFIT.loadMOFs()" style="margin-top:20px;font-family:var(--font-mono);font-size:11px;color:var(--cyan);background:transparent;border:1px solid var(--border-bright);border-radius:6px;padding:8px 18px;cursor:pointer;">↺ RETRY</button>
     </div>`;
 }
 
@@ -169,43 +208,42 @@ function showEmptyState(grid) {
     <div style="grid-column:1/-1;text-align:center;padding:48px 0;">
       <div style="font-size:28px;margin-bottom:12px;">◌</div>
       <div style="font-family:var(--font-display);font-size:16px;color:var(--text-secondary);margin-bottom:8px;">No MOFs match your query</div>
-      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">Try adjusting filters or clearing the search</div>
-      <button onclick="MOFFIT.resetFilters()" style="margin-top:20px;font-family:var(--font-mono);font-size:11px;
-        color:var(--cyan);background:transparent;border:1px solid var(--border-bright);
-        border-radius:6px;padding:8px 18px;cursor:pointer;">↺ RESET FILTERS</button>
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">Adjust filters or widen the property ranges</div>
+      <button onclick="MOFFIT.resetFilters()" style="margin-top:20px;font-family:var(--font-mono);font-size:11px;color:var(--cyan);background:transparent;border:1px solid var(--border-bright);border-radius:6px;padding:8px 18px;cursor:pointer;">↺ RESET ALL</button>
     </div>`;
 }
 
-/* ─── RENDER CARDS ─── */
+/* ════════════════════════════════════════════
+   RENDER CARDS
+════════════════════════════════════════════ */
 function renderCards(mofs, grid) {
-  if (!mofs.length) { showEmptyState(grid); return; }
+  if (!mofs.length) { showEmptyState(grid); updateCompareBar(); return; }
 
   grid.innerHTML = mofs.map((mof, i) => buildCardHTML(mof, i)).join('');
 
   grid.querySelectorAll('.mof-card').forEach((card, i) => {
-    card.style.opacity = '0';
+    card.style.opacity   = '0';
     card.style.transform = 'translateY(20px)';
     card.style.transition = 'none';
     setTimeout(() => {
       card.style.transition = 'opacity 0.5s ease, transform 0.5s ease, border-color 0.35s, box-shadow 0.35s';
-      card.style.opacity = '1';
-      card.style.transform = 'translateY(0)';
+      card.style.opacity    = '1';
+      card.style.transform  = 'translateY(0)';
     }, i * CONFIG.cardStaggerMs + 80);
   });
 
-  // Populate selector panel
   updateMOFSelector(mofs);
-
-  // Auto-select top MOF after animation — with retry for INSIGHTS
+  updateCompareBar();
   setTimeout(() => { if (mofs.length) selectMOF(mofs[0].id); }, 700);
 }
 
-/* ─── MOF SELECTOR PANEL ─── */
+/* ════════════════════════════════════════════
+   MOF SELECTOR PANEL (above visualiser)
+════════════════════════════════════════════ */
 function updateMOFSelector(mofs) {
   const panel = document.getElementById('mof-selector-panel');
   if (!panel) return;
-
-  if (!mofs || !mofs.length) { panel.style.display = 'none'; return; }
+  if (!mofs?.length) { panel.style.display = 'none'; return; }
   panel.style.display = 'block';
 
   const buttons = mofs.map(mof => {
@@ -233,49 +271,48 @@ function updateMOFSelector(mofs) {
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;">${buttons}</div>`;
 
-  // Highlight current selection
-  if (DB.selected) {
-    const btn = panel.querySelector(`[data-id="${DB.selected.id}"]`);
-    if (btn) btn.classList.add('active');
-  }
+  if (DB.selected) highlightSelectorBtn(DB.selected.id);
 }
 
-/* ─── SELECT MOF ─── */
+function highlightSelectorBtn(id) {
+  document.querySelectorAll('.mof-selector-btn').forEach(b => {
+    const active = b.dataset.id === id;
+    b.style.borderColor = active ? 'var(--cyan)' : '';
+    b.style.color       = active ? 'var(--cyan)' : '';
+    b.style.background  = active ? 'rgba(0,212,255,0.06)' : '';
+  });
+}
+
+/* ════════════════════════════════════════════
+   SELECT MOF  (drives visualiser)
+════════════════════════════════════════════ */
 function selectMOF(id) {
   const mof = DB.all.find(m => m.id === id);
   if (!mof) return;
   DB.selected = mof;
 
-  // Highlight card
   document.querySelectorAll('.mof-card').forEach(c => {
     const sel = c.dataset.id === id;
     c.style.borderColor = sel ? 'rgba(0,212,255,0.6)' : '';
     c.style.boxShadow   = sel ? '0 0 32px rgba(0,212,255,0.15)' : '';
   });
 
-  // Highlight selector button
-  document.querySelectorAll('.mof-selector-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.id === id);
-  });
-
-  // Update viz banner + canvases
+  highlightSelectorBtn(id);
   updateVizBanner(mof);
   VIZ.drawPoreStructure(mof);
   VIZ.drawPoreNetwork(mof);
   VIZ.drawOrbitalDensity(mof);
 
-  // Update insights — retry until INSIGHTS is ready (fixes load order issue)
-  const tryInsights = (attempts = 0) => {
-    if (window.INSIGHTS && typeof window.INSIGHTS.loadInsights === 'function') {
-      window.INSIGHTS.loadInsights(mof);
-    } else if (attempts < 15) {
-      setTimeout(() => tryInsights(attempts + 1), 200);
-    }
+  const tryInsights = (n = 0) => {
+    if (window.INSIGHTS?.loadInsights) window.INSIGHTS.loadInsights(mof);
+    else if (n < 15) setTimeout(() => tryInsights(n + 1), 200);
   };
   tryInsights();
 }
 
-/* ─── VIZ BANNER ─── */
+/* ════════════════════════════════════════════
+   VIZ BANNER
+════════════════════════════════════════════ */
 function updateVizBanner(mof) {
   const banner = document.getElementById('viz-active-mof');
   if (!banner) return;
@@ -303,10 +340,12 @@ function updateVizBanner(mof) {
   banner.style.opacity = '1';
 }
 
-/* ─── VIZ ENGINE ─── */
+/* ════════════════════════════════════════════
+   VIZ ENGINE
+════════════════════════════════════════════ */
 const VIZ = (() => {
   const state = { viz1:{t:0,raf:null}, viz2:{t:0,raf:null,nodes:[]}, viz3:{t:0,raf:null} };
-  const isMobile = () => window.innerWidth < 768;
+  const isMob = () => window.innerWidth < 768;
 
   function getCanvas(id) {
     const canvas = document.getElementById(id);
@@ -399,7 +438,7 @@ const VIZ = (() => {
       state.viz3.t+=0.012; const t=state.viz3.t;
       const W=canvas.width,H=canvas.height,cx=W/2,cy=H/2;
       ctx.fillStyle='rgba(5,11,18,0.22)'; ctx.fillRect(0,0,W,H);
-      const baseR=isMobile()?22:28, colors=[mv.color,mv.color2,'#ffffff','#a78bfa'];
+      const baseR=isMob()?22:28, colors=[mv.color,mv.color2,'#ffffff','#a78bfa'];
       mv.orbitals.forEach((electrons,orbit)=>{
         const r=(orbit+1)*baseR, c=colors[orbit%colors.length], dir=orbit%2===0?1:-1;
         ctx.beginPath();ctx.ellipse(cx,cy,r,r*0.38,orbit*18*Math.PI/180,0,Math.PI*2);
@@ -426,7 +465,452 @@ const VIZ = (() => {
   return { drawPoreStructure, drawPoreNetwork, drawOrbitalDensity };
 })();
 
-/* ─── FILTER / SEARCH / SORT ─── */
+/* ════════════════════════════════════════════════════════════
+   ███████████████████████████████████████████████████████████
+   FEATURE 1: PROPERTY RANGE FILTER
+   ───────────────────────────────────────────────────────────
+   Dual-handle range sliders rendered in #property-range-panel.
+   Uses native <input type=range> styled to match the dark theme.
+   Two overlapping inputs (lo + hi) give the dual-handle UX.
+███████████████████████████████████████████████████████████ */
+
+const RANGE_DEFS = [
+  { key:'surfaceArea',         label:'Surface Area',      unit:'m²/g', step:50,   decimals:0 },
+  { key:'poreVolume',          label:'Pore Volume',       unit:'cm³/g',step:0.05, decimals:2 },
+  { key:'thermalStability',    label:'Thermal Stability', unit:'°C',   step:10,   decimals:0 },
+  { key:'recommendationScore', label:'AI Score',          unit:'',     step:0.1,  decimals:1 },
+];
+
+function buildRangePanel() {
+  const panel = document.getElementById('property-range-panel');
+  if (!panel) return;
+
+  panel.innerHTML = `
+    <div class="range-panel-header">
+      <span class="range-panel-title">⬡ Property Ranges</span>
+      <button class="range-reset-btn" onclick="MOFFIT.resetRanges()" aria-label="Reset all property ranges">↺ Reset</button>
+    </div>
+    <div class="range-sliders">
+      ${RANGE_DEFS.map(def => {
+        const r = RANGES[def.key];
+        return `
+        <div class="range-group" data-key="${def.key}">
+          <div class="range-label-row">
+            <span class="range-label">${def.label}</span>
+            <span class="range-values" id="rv-${def.key}">
+              ${fmtRange(r.lo, r.hi, def)}
+            </span>
+          </div>
+          <div class="dual-range-wrap">
+            <div class="range-track">
+              <div class="range-fill" id="rf-${def.key}"></div>
+            </div>
+            <input type="range" class="range-input range-lo" id="rlo-${def.key}"
+                   min="${r.min}" max="${r.max}" step="${def.step}" value="${r.lo}"
+                   aria-label="${def.label} minimum"
+                   oninput="MOFFIT.onRangeInput('${def.key}','lo',this.value)">
+            <input type="range" class="range-input range-hi" id="rhi-${def.key}"
+                   min="${r.min}" max="${r.max}" step="${def.step}" value="${r.hi}"
+                   aria-label="${def.label} maximum"
+                   oninput="MOFFIT.onRangeInput('${def.key}','hi',this.value)">
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  // Initial fill positions
+  RANGE_DEFS.forEach(def => updateRangeFill(def.key));
+}
+
+function fmtVal(v, def) {
+  return def.decimals > 0 ? v.toFixed(def.decimals) : Math.round(v).toLocaleString();
+}
+
+function fmtRange(lo, hi, def) {
+  return `${fmtVal(lo, def)}${def.unit} – ${fmtVal(hi, def)}${def.unit}`;
+}
+
+function updateRangeFill(key) {
+  const def  = RANGE_DEFS.find(d => d.key === key);
+  const r    = RANGES[key];
+  const fill = document.getElementById(`rf-${key}`);
+  const valEl= document.getElementById(`rv-${key}`);
+  if (!fill || !def) return;
+
+  const pct = (v) => ((v - r.min) / (r.max - r.min)) * 100;
+  fill.style.left  = `${pct(r.lo)}%`;
+  fill.style.width = `${pct(r.hi) - pct(r.lo)}%`;
+  if (valEl) valEl.textContent = fmtRange(r.lo, r.hi, def);
+}
+
+function onRangeInput(key, handle, rawVal) {
+  const r   = RANGES[key];
+  const val = parseFloat(rawVal);
+
+  if (handle === 'lo') {
+    r.lo = Math.min(val, r.hi - (RANGE_DEFS.find(d=>d.key===key)?.step || 1));
+    document.getElementById(`rlo-${key}`).value = r.lo;
+  } else {
+    r.hi = Math.max(val, r.lo + (RANGE_DEFS.find(d=>d.key===key)?.step || 1));
+    document.getElementById(`rhi-${key}`).value = r.hi;
+  }
+
+  updateRangeFill(key);
+  if (DB.revealed) applyPipeline(true);
+}
+
+function filterByRanges(mofs) {
+  return mofs.filter(mof => {
+    for (const def of RANGE_DEFS) {
+      const r = RANGES[def.key];
+      const v = mof[def.key];
+      if (typeof v !== 'number') continue;
+      if (v < r.lo || v > r.hi) return false;
+    }
+    return true;
+  });
+}
+
+function resetRanges() {
+  RANGE_DEFS.forEach(def => {
+    const r = RANGES[def.key];
+    r.lo = r.min; r.hi = r.max;
+    const lo = document.getElementById(`rlo-${def.key}`);
+    const hi = document.getElementById(`rhi-${def.key}`);
+    if (lo) lo.value = r.lo;
+    if (hi) hi.value = r.hi;
+    updateRangeFill(def.key);
+  });
+  if (DB.revealed) applyPipeline(true);
+}
+
+/* ════════════════════════════════════════════════════════════
+   FEATURE 2: MOF COMPARISON TOOL
+   ───────────────────────────────────────────────────────────
+   • Cards get a '+' toggle button.
+   • Up to 3 MOFs selectable into DB.compare (Set of ids).
+   • A floating compare bar appears at the bottom showing
+     selected MOFs + "Compare" CTA.
+   • Clicking "Compare" opens a full-screen modal with:
+     – Side-by-side metric table
+     – Spider/radar chart (Canvas, no external lib)
+     – Scrollable on mobile
+████████████████████████████████████████████████████████████ */
+
+/* ── Toggle a MOF in/out of compare set ── */
+function toggleCompare(id) {
+  if (DB.compare.has(id)) {
+    DB.compare.delete(id);
+  } else {
+    if (DB.compare.size >= 3) {
+      // Remove oldest (first in iteration order)
+      DB.compare.delete(DB.compare.values().next().value);
+    }
+    DB.compare.add(id);
+  }
+  // Re-render cards so toggle buttons update
+  if (DB.revealed) renderCards(DB.active, document.getElementById('results-grid'));
+  else updateCompareBar();
+}
+
+/* ── Floating compare bar ── */
+function updateCompareBar() {
+  const bar = document.getElementById('compare-bar');
+  if (!bar) return;
+
+  if (DB.compare.size === 0) { bar.classList.remove('visible'); return; }
+  bar.classList.add('visible');
+
+  const mofs = [...DB.compare].map(id => DB.all.find(m => m.id === id)).filter(Boolean);
+  const chips = mofs.map(mof => {
+    const mv = getMetalViz(mof.metalNode);
+    return `<div class="compare-chip">
+      <span style="width:5px;height:5px;border-radius:50%;background:${mv.color};flex-shrink:0;display:inline-block;"></span>
+      <span>${mof.name}</span>
+      <button onclick="MOFFIT.toggleCompare('${mof.id}')" aria-label="Remove ${mof.name}" class="compare-chip-x">×</button>
+    </div>`;
+  }).join('');
+
+  bar.innerHTML = `
+    <div class="compare-bar-inner">
+      <div class="compare-bar-label">
+        <span style="color:var(--cyan);font-family:var(--font-mono);font-size:10px;
+                     letter-spacing:0.1em;text-transform:uppercase;">
+          Comparing ${mofs.length}/3
+        </span>
+        <div class="compare-chips">${chips}</div>
+      </div>
+      <div class="compare-bar-actions">
+        <button class="btn-compare-clear" onclick="MOFFIT.clearCompare()">Clear</button>
+        <button class="btn-compare-open"  onclick="MOFFIT.openCompareModal()"
+                ${mofs.length < 2 ? 'disabled title="Select at least 2 MOFs"' : ''}>
+          ⬡ Compare ${mofs.length} MOFs
+        </button>
+      </div>
+    </div>`;
+}
+
+function clearCompare() {
+  DB.compare.clear();
+  if (DB.revealed) renderCards(DB.active, document.getElementById('results-grid'));
+  else updateCompareBar();
+}
+
+/* ── Modal open/close ── */
+function openCompareModal() {
+  const mofs = [...DB.compare].map(id => DB.all.find(m => m.id === id)).filter(Boolean);
+  if (mofs.length < 2) return;
+
+  const modal = document.getElementById('compare-modal');
+  if (!modal) return;
+
+  modal.innerHTML = buildCompareModalContent(mofs);
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  // Draw radar after DOM is ready
+  requestAnimationFrame(() => drawRadarChart(mofs));
+}
+
+function closeCompareModal() {
+  const modal = document.getElementById('compare-modal');
+  if (modal) modal.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+/* ── Comparison table + radar ── */
+function buildCompareModalContent(mofs) {
+  const COMPARE_COLORS = ['#00d4ff','#8b5cf6','#14b8a6'];
+
+  const metricRows = [
+    { label:'Surface Area (m²/g)',    key:'surfaceArea',         fmt: v => v.toLocaleString() },
+    { label:'Pore Volume (cm³/g)',    key:'poreVolume',          fmt: v => v.toFixed(2) },
+    { label:'Pore Size (Å)',          key:'poreSize',            fmt: v => v },
+    { label:'Thermal Stability (°C)', key:'thermalStability',    fmt: v => v },
+    { label:'Water Stability',        key:'waterStability',      fmt: v => v },
+    { label:'Metal Node',             key:'metalNode',           fmt: v => v },
+    { label:'AI Score',               key:'recommendationScore', fmt: v => v },
+  ];
+
+  const colHeaders = mofs.map((m, i) => `
+    <th style="color:${COMPARE_COLORS[i]};font-family:var(--font-display);
+               font-size:15px;font-weight:700;padding:10px 16px;text-align:center;
+               border-bottom:2px solid ${COMPARE_COLORS[i]}40;">
+      ${m.name}
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);
+                  font-weight:400;margin-top:3px;">${m.formula}</div>
+    </th>`).join('');
+
+  const tableRows = metricRows.map(row => {
+    const vals = mofs.map(m => m[row.key]);
+    // Highlight best numeric value
+    const numVals = vals.map(v => parseFloat(v));
+    const best = isNaN(numVals[0]) ? -1 : Math.max(...numVals);
+
+    const cells = mofs.map((m, i) => {
+      const v    = row.fmt(m[row.key]);
+      const nv   = parseFloat(m[row.key]);
+      const isBest = !isNaN(nv) && nv === best && mofs.length > 1;
+      return `<td style="padding:10px 16px;text-align:center;font-family:var(--font-mono);
+                          font-size:13px;color:${isBest ? COMPARE_COLORS[i] : 'var(--text-secondary)'};
+                          font-weight:${isBest ? '600' : '400'};border-bottom:1px solid var(--border);">
+                ${v}${isBest ? ' ★' : ''}
+              </td>`;
+    }).join('');
+
+    return `<tr>
+      <td style="padding:10px 16px;font-family:var(--font-mono);font-size:10px;
+                 color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;
+                 border-bottom:1px solid var(--border);white-space:nowrap;">
+        ${row.label}
+      </td>${cells}
+    </tr>`;
+  }).join('');
+
+  const appRows = mofs.map((m, i) => {
+    const apps = Array.isArray(m.applicationTypes) ? m.applicationTypes : [m.applicationTypes];
+    return `<td style="padding:10px 16px;text-align:center;border-bottom:1px solid var(--border);">
+      ${apps.map(a => `<span style="display:inline-block;margin:2px;font-family:var(--font-mono);
+                               font-size:9px;padding:3px 7px;border-radius:4px;
+                               background:${COMPARE_COLORS[i]}15;border:1px solid ${COMPARE_COLORS[i]}30;
+                               color:${COMPARE_COLORS[i]}">${a}</span>`).join('')}
+    </td>`;
+  }).join('');
+
+  const descRows = mofs.map((m, i) => `
+    <td style="padding:12px 16px;font-family:var(--font-mono);font-size:11px;
+               color:var(--text-secondary);line-height:1.55;vertical-align:top;
+               border-bottom:1px solid var(--border);">
+      ${m.description}
+    </td>`).join('');
+
+  return `
+  <div class="compare-modal-backdrop" onclick="MOFFIT.closeCompareModal()"></div>
+  <div class="compare-modal-box" role="dialog" aria-modal="true" aria-label="MOF Comparison">
+    <div class="compare-modal-header">
+      <div>
+        <div style="font-family:var(--font-display);font-size:22px;font-weight:700;">MOF Comparison</div>
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);margin-top:3px;">
+          ${mofs.map(m => m.name).join(' vs ')}
+        </div>
+      </div>
+      <button class="compare-close-btn" onclick="MOFFIT.closeCompareModal()" aria-label="Close comparison">✕</button>
+    </div>
+
+    <!-- Radar chart -->
+    <div class="compare-radar-wrap">
+      <canvas id="radar-canvas" aria-label="Radar comparison chart"></canvas>
+      <div class="compare-radar-legend">
+        ${mofs.map((m,i) => `
+          <div style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;">
+            <span style="width:10px;height:10px;border-radius:50%;background:${COMPARE_COLORS[i]};flex-shrink:0;"></span>
+            <span style="color:var(--text-secondary);">${m.name}</span>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- Data table -->
+    <div style="overflow-x:auto;margin-top:8px;border-radius:10px;border:1px solid var(--border);">
+      <table style="width:100%;border-collapse:collapse;min-width:460px;">
+        <thead>
+          <tr>
+            <th style="padding:10px 16px;text-align:left;font-family:var(--font-mono);font-size:10px;
+                       color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase;
+                       border-bottom:1px solid var(--border);">Property</th>
+            ${colHeaders}
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+          <tr>
+            <td style="padding:10px 16px;font-family:var(--font-mono);font-size:10px;
+                       color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;
+                       border-bottom:1px solid var(--border);">Applications</td>
+            ${appRows}
+          </tr>
+          <tr>
+            <td style="padding:12px 16px;font-family:var(--font-mono);font-size:10px;
+                       color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;
+                       vertical-align:top;border-bottom:1px solid var(--border);">AI Insight</td>
+            ${descRows}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+/* ── Radar / Spider Chart ── */
+function drawRadarChart(mofs) {
+  const canvas = document.getElementById('radar-canvas');
+  if (!canvas) return;
+
+  const wrap = canvas.closest('.compare-radar-wrap');
+  const size  = Math.min(wrap?.clientWidth ?? 320, 320);
+  canvas.width  = size;
+  canvas.height = size;
+
+  const ctx  = canvas.getContext('2d');
+  const cx   = size / 2, cy = size / 2;
+  const R    = size * 0.38;
+  const COLORS = ['#00d4ff','#8b5cf6','#14b8a6'];
+
+  const AXES = [
+    { label:'Surface',  key:'surfaceArea',         max:5900 },
+    { label:'Porosity', key:'poreVolume',           max:3.86 },
+    { label:'Stability',key:'thermalStability',     max:550  },
+    { label:'Score',    key:'recommendationScore',  max:10   },
+    { label:'WaterStab',key:'_waterStab',           max:100  },
+  ];
+
+  // Map water stability text → 0-100
+  const stabMap = { Excellent:95, High:82, Good:65, Moderate:55, Low:30 };
+  const axisCount = AXES.length;
+
+  function getVal(mof, axis) {
+    if (axis.key === '_waterStab') return (stabMap[mof.waterStability] ?? 50) / 100;
+    return Math.min((mof[axis.key] ?? 0) / axis.max, 1);
+  }
+
+  // Background
+  ctx.fillStyle = '#050b12';
+  ctx.fillRect(0, 0, size, size);
+
+  // Grid rings (5 levels)
+  for (let ring = 1; ring <= 5; ring++) {
+    const rr = R * ring / 5;
+    ctx.beginPath();
+    for (let i = 0; i < axisCount; i++) {
+      const a = (i / axisCount) * Math.PI * 2 - Math.PI / 2;
+      const x = cx + rr * Math.cos(a), y = cy + rr * Math.sin(a);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = 'rgba(0,212,255,0.1)';
+    ctx.lineWidth   = 1;
+    ctx.stroke();
+
+    if (ring === 5) ctx.strokeStyle = 'rgba(0,212,255,0.25)';
+    ctx.stroke();
+  }
+
+  // Axis spokes + labels
+  AXES.forEach((axis, i) => {
+    const a = (i / axisCount) * Math.PI * 2 - Math.PI / 2;
+    const lx = cx + (R + 18) * Math.cos(a);
+    const ly = cy + (R + 18) * Math.sin(a);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a));
+    ctx.strokeStyle = 'rgba(0,212,255,0.15)';
+    ctx.lineWidth   = 1;
+    ctx.stroke();
+
+    ctx.font         = `10px monospace`;
+    ctx.fillStyle    = 'rgba(125,160,184,0.85)';
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(axis.label, lx, ly);
+  });
+
+  // MOF polygons
+  mofs.forEach((mof, mi) => {
+    const col = COLORS[mi];
+    ctx.beginPath();
+    AXES.forEach((axis, i) => {
+      const a = (i / axisCount) * Math.PI * 2 - Math.PI / 2;
+      const v = getVal(mof, axis);
+      const x = cx + R * v * Math.cos(a);
+      const y = cy + R * v * Math.sin(a);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+
+    // Fill
+    ctx.fillStyle = col.replace('#','rgba(').replace(/(..)(..)(..)/, (_, r, g, b) =>
+      `${parseInt(r,16)},${parseInt(g,16)},${parseInt(b,16)},0.12)`);
+    ctx.fill();
+
+    // Stroke
+    ctx.strokeStyle = col;
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+
+    // Dots
+    AXES.forEach((axis, i) => {
+      const a = (i / axisCount) * Math.PI * 2 - Math.PI / 2;
+      const v = getVal(mof, axis);
+      const x = cx + R * v * Math.cos(a);
+      const y = cy + R * v * Math.sin(a);
+      ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = col; ctx.fill();
+    });
+  });
+}
+
+/* ════════════════════════════════════════════
+   FILTER / SEARCH / SORT
+════════════════════════════════════════════ */
 function filterMOFs(mofs, appType, metalNode) {
   return mofs.filter(mof => {
     const matchesApp = (!appType||appType==='all') ? true
@@ -451,7 +935,9 @@ function searchMOFs(mofs, query) {
 
 function sortMOFs(mofs) { return [...mofs].sort((a,b)=>b.recommendationScore-a.recommendationScore); }
 
-/* ─── PIPELINE ─── */
+/* ════════════════════════════════════════════
+   PIPELINE — filter → range → search → sort
+════════════════════════════════════════════ */
 function applyPipeline(reveal = false) {
   const grid      = document.getElementById('results-grid');
   const appType   = document.getElementById('app-type')?.value   ?? '';
@@ -459,19 +945,21 @@ function applyPipeline(reveal = false) {
   const query     = document.getElementById('mof-search')?.value ?? '';
 
   let results = filterMOFs(DB.all, appType, metalNode);
+  results     = filterByRanges(results);          // ← NEW: range filter
   results     = searchMOFs(results, query);
   results     = sortMOFs(results);
   DB.active   = results;
 
   if (reveal) DB.revealed = true;
-
   if (!DB.revealed) { showPromptState(grid); return; }
 
   renderCards(results, grid);
   setTimeout(() => grid.scrollIntoView({ behavior:'smooth', block:'start' }), 600);
 }
 
-/* ─── LOAD ─── */
+/* ════════════════════════════════════════════
+   LOAD MOFs + calibrate range bounds
+════════════════════════════════════════════ */
 async function loadMOFs() {
   const grid = document.getElementById('results-grid');
   if (!grid) return;
@@ -482,26 +970,46 @@ async function loadMOFs() {
     const data = await res.json();
     if (!Array.isArray(data)||!data.length) throw new Error('Empty dataset');
     DB.all = data;
+
+    // Calibrate RANGES from real data
+    RANGE_DEFS.forEach(def => {
+      const vals = data.map(m => m[def.key]).filter(v => typeof v === 'number');
+      if (!vals.length) return;
+      RANGES[def.key].min = Math.floor(Math.min(...vals) / def.step) * def.step;
+      RANGES[def.key].max = Math.ceil( Math.max(...vals) / def.step) * def.step;
+      RANGES[def.key].lo  = RANGES[def.key].min;
+      RANGES[def.key].hi  = RANGES[def.key].max;
+    });
+
+    buildRangePanel();   // render sliders with real bounds
     showPromptState(grid);
     const panel = document.getElementById('mof-selector-panel');
     if (panel) panel.style.display = 'none';
   } catch (err) { showErrorState(grid, err.message); }
 }
 
-/* ─── RESET ─── */
+/* ════════════════════════════════════════════
+   RESET ALL
+════════════════════════════════════════════ */
 function resetFilters() {
   ['app-type','metal-node'].forEach(id=>{ const el=document.getElementById(id); if(el)el.selectedIndex=0; });
   const s=document.getElementById('mof-search'); if(s)s.value='';
-  if (DB.revealed) applyPipeline(true);
+  resetRanges();
 }
 
-/* ─── GENERATE ─── */
+/* ════════════════════════════════════════════
+   GENERATE
+════════════════════════════════════════════ */
 function generateRec() { applyPipeline(true); }
 
-/* ─── DEBOUNCE ─── */
+/* ════════════════════════════════════════════
+   DEBOUNCE
+════════════════════════════════════════════ */
 function debounce(fn, ms) { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
 
-/* ─── WIRE CONTROLS ─── */
+/* ════════════════════════════════════════════
+   WIRE CONTROLS
+════════════════════════════════════════════ */
 function wireControls() {
   const si = document.getElementById('mof-search');
   if (si) si.addEventListener('input', debounce(()=>{ if(DB.revealed)applyPipeline(true); }, CONFIG.searchDebounceMs));
@@ -509,17 +1017,27 @@ function wireControls() {
     const el=document.getElementById(id);
     if(el)el.addEventListener('change',()=>{ if(DB.revealed)applyPipeline(true); });
   });
+  // Close modal on Escape
+  document.addEventListener('keydown', e => { if(e.key==='Escape') closeCompareModal(); });
 }
 
-/* ─── PUBLIC API ─── */
+/* ════════════════════════════════════════════
+   PUBLIC API
+════════════════════════════════════════════ */
 window.MOFFIT = {
   loadMOFs, generateRec, resetFilters, selectMOF,
   applyPipeline, filterMOFs, searchMOFs, sortMOFs,
+  // Range filter
+  onRangeInput, resetRanges,
+  // Comparison
+  toggleCompare, clearCompare, openCompareModal, closeCompareModal,
   getAll:      ()=>[...DB.all],
   getActive:   ()=>[...DB.active],
   getSelected: ()=>DB.selected,
   config: CONFIG,
 };
 
-/* ─── BOOT ─── */
+/* ════════════════════════════════════════════
+   BOOT
+════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => { wireControls(); loadMOFs(); });
